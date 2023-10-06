@@ -10,10 +10,33 @@ from scipy.stats import crystalball
 import json
 
 
+# Read the root file outputed by vmmsdat and converts it to a pandas dataframe
+# Input is a list containing the locations of the root files and flags for whether cluster and/or hit information should be included
+def read_root(files, clusters=True, hits=False):
+
+    if (clusters == True) and (hits == False):
+
+        df_cluster = read_clusters(files)
+
+        return df_cluster
+
+    if (clusters == True) and (hits == True):
+
+        df_cluster = read_clusters(files)
+        df_hits = read_hits(files)
+
+        return df_cluster, df_hits
+
+    
+    if (clusters == False) and (hits == True):
+
+        df_hits = read_hits(files)
+
+        return df_hits
 
 
-# Read a root file and output a pandas datafram
-def clusters2pandas(file_loc):
+# Read the cluster info from a root file output from vmmsdat
+def read_cluster(file_loc):
 
 	file = uproot.open(file_loc)
 
@@ -48,11 +71,8 @@ def clusters2pandas(file_loc):
 
 	return df
 
-# Read many root files and output a pandas datafram
-roots2pandas = lambda  files: pd.concat( [root2pandas(file) for file in files] ,ignore_index=True)
-
-# Read a hits info into a pandas datafram
-def hits2pandas(file_loc):
+# Read the hit info from a root file output from vmmsdat
+def read_hit(file_loc):
     
     file = uproot.open(file_loc)
     hits = file['hits']['hits']
@@ -75,6 +95,11 @@ def hits2pandas(file_loc):
     df = pd.DataFrame(data = dict)
     
     return df
+
+# Same as read_cluster and read_hit but these read several root files
+read_clusters = lambda  files: pd.concat( [read_cluster(file) for file in files] ,ignore_index=True)
+read_hits = lambda  files: pd.concat( [read_hit(file) for file in files] ,ignore_index=True)
+
 
 # Gaussian Function
 def gaus(x, y_off, const, mu, sigma):
