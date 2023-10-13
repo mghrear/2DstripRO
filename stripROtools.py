@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib
 from mpl_toolkits.mplot3d import Axes3D
+from scipy import stats
 from scipy.optimize import curve_fit
 from scipy.stats import crystalball
 import json
@@ -140,6 +141,9 @@ class VMMconfig:
             df_ped["fec"] = df_ped["fec"].apply(self.fecIDmap)
             # Add pedestal info to df
             self.StripInfo = self.StripInfo.merge(df_ped, on=['vmm', 'ch', 'fec'], how='left')
+            # Create an offline mask keeping only channels with 140mV < pedestal < 200mV
+            # These channels are  damaged and do not fire
+            self.StripInfo["mask"] = self.StripInfo["pedestal"].apply(lambda x: (140<x) and (x<200) )
             
         # Add threshold info if it is available
         if self.THL_loc != None:
@@ -212,10 +216,13 @@ class VMMconfig:
         if self.THL_DAC_loc == None:
             raise Exception("A threshold DAC calibration must be provided")
             
+        if self.pedestal_loc == None:
+            raise Exception("A pedestal scan must be provided")
+
         # Collect pedestal info for each channel
-        test_ped = self.StripInfo[["fec","vmm","pedestal"]].copy()
+        test_ped = self.StripInfo[["fec","vmm","pedestal","mask"]].copy()
         # Remove damaged and masked channels (channels where pedestal is too high or low)
-        test_ped = test_ped.loc[ (test_ped.pedestal  > 140) & (test_ped.pedestal  < 200) ].reset_index(drop=True)
+        test_ped = test_ped.loc[ test_ped["mask"] ].reset_index(drop=True)
         # Get the mean pedestal value per VMM
         test_ped = test_ped.groupby(["fec","vmm"]).mean().reset_index()
 
@@ -229,7 +236,7 @@ class VMMconfig:
         # Use the DAC calibrations to get suggested DAC value for each VMM
         test_THL["threshold_DAC"] = ( test_THL["target_thres_mV"] - self.THL_DAC["offset"])/self.THL_DAC["slope"]
         
-        return test_THL[["fec","vmm","target_thres_mV","threshold_DAC"]]
+        return test_THL[["fec","vmm","pedestal","target_thres_mV","threshold_DAC"]]
     
     
     # suggests threshold DAC values given a target in mV
@@ -649,60 +656,78 @@ def annotate_heatmap(im, data=None, valfmt="{x:.0f}", textcolors=("black", "whit
 # Return relavent values
 def fitCB(df_cluster, n_vmm_x,n_vmm_y, min_hits, plot=True):
 
-    # Flag fiducial events
-    df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0)> (64*n_vmm_x) ) & (max(row.strips0)< (64* (n_vmm_x+1) )  ) & (min(row.strips1)> (64*n_vmm_y)  ) & (max(row.strips1)< (64* (n_vmm_y+1) ) )  ,axis = 1)
-
-    # Get number of electrons for fiducial events with min_hits
-    gain = df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].gain
-
-    xmin = 0
-    xmax = gain.max()
-    nbins = 50
-
-    hist, bin_edges = np.histogram(gain,nbins,(xmin,xmax))
-    bin_centers = (bin_edges[1:]+bin_edges[:-1])/2.
-    # Find Non-zero bins in Histogram
-    nz = hist>0
-    # Get error bars for bins
-    n_err = np.sqrt(hist[nz])
-
-    if plot == True:
-        # Create Python Histogram, use density this time
-        plt.figure()
-        hist2, bin_edges2, patches2 = plt.hist(gain,nbins,(xmin,xmax), density = True, color='g',alpha=0.6)
-        bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
-        plt.xlabel("Gain")
-        plt.ylabel("Count")
+    # fiducialize events based on selected vmm combo
+    if (n_vmm_x == 2) and (n_vmm_y == 10):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 156 ) & (max(row.strips0) <= 217  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
+    elif (n_vmm_x == 2) and (n_vmm_y == 13):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 156 ) & (max(row.strips0) <= 217  ) & (min(row.strips1) >= 280  ) & (max(row.strips1) <=  342 )  ,axis = 1)
+    elif (n_vmm_x == 5) and (n_vmm_y == 10):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 280 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
+    elif (n_vmm_x == 5) and (n_vmm_y == 13):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 280 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 280  ) & (max(row.strips1) <=  342 )  ,axis = 1)
     else:
+        raise Exception("provide valid vmm combo")
 
-        # Create Python Histogram, use density this time
-        hist2, bin_edges2 = np.histogram(gain,nbins,(xmin,xmax), density = True)
-        bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
+    # only perform the fit if there are more than 5 examples
+    try:
 
-    # Guess mu as bin_center with most hits
-    mu_guess = bin_centers2[np.argmax(hist2)]
+        # Get gain values
+        gain = df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].gain
+        # Keep only gain entries with z-score < 3 (exclude outlier which may be cosmic tracks or nuclear recoils)
+        gain =  gain[(np.abs(stats.zscore(gain)) < 3)]
 
-    # Find Non-zero bins in Histogram
-    nz2 = hist2>0
-    # Get error bars for bins
-    n_err2 = (np.sqrt(hist[nz])/hist[nz]) * hist2[nz2] # Fractional error times hist value
 
-    # Define Range and Fit :
-    coeff, covar = curve_fit(crystalball.pdf, bin_centers2[nz2], hist2[nz2], sigma=n_err2, absolute_sigma=True, p0=(1, 2,mu_guess,1600))
+        xmin = 0
+        xmax = gain.max()
+        nbins = 50
 
-    f_opti = crystalball.pdf(bin_centers,*coeff)
+        hist, bin_edges = np.histogram(gain,nbins,(xmin,xmax))
+        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2.
+        # Find Non-zero bins in Histogram
+        nz = hist>0
+        # Get error bars for bins
+        n_err = np.sqrt(hist[nz])
 
-    perr = np.sqrt(np.diag(covar))
+        if plot == True:
+            # Create Python Histogram, use density this time
+            plt.figure()
+            hist2, bin_edges2, patches2 = plt.hist(gain,nbins,(xmin,xmax), density = True, color='g',alpha=0.6)
+            bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
+            plt.xlabel("Gain")
+            plt.ylabel("Count")
+        else:
 
-    print("beta: ", coeff[0], "+/-", perr[0] )
-    print("m: ", coeff[1], "+/-", perr[1] )
-    print("mu: ", coeff[2],"+/-", perr[2]  )
-    print("sigma: ", coeff[3],"+/-", perr[3]  )
+            # Create Python Histogram, use density this time
+            hist2, bin_edges2 = np.histogram(gain,nbins,(xmin,xmax), density = True)
+            bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
 
-    if plot == True:
-        plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
-        plt.show()
+        # Guess mu as bin_center with most hits
+        mu_guess = bin_centers2[np.argmax(hist2)]
 
-    charge_sharing = 1.0*np.sum(df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].electrons_x)/np.sum(df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].electrons_y)
+        # Find Non-zero bins in Histogram
+        nz2 = hist2>0
+        # Get error bars for bins
+        n_err2 = (np.sqrt(hist[nz])/hist[nz]) * hist2[nz2] # Fractional error times hist value
 
-    return coeff[0], perr[0], coeff[1], perr[1], coeff[2], perr[2], coeff[3], perr[3], charge_sharing
+        # Define Range and Fit :
+        coeff, covar = curve_fit(crystalball.pdf, bin_centers2[nz2], hist2[nz2], sigma=n_err2, absolute_sigma=True, p0=(1, 2,mu_guess,1600))
+
+        f_opti = crystalball.pdf(bin_centers,*coeff)
+
+        perr = np.sqrt(np.diag(covar))
+
+        # print("beta: ", coeff[0], "+/-", perr[0] )
+        # print("m: ", coeff[1], "+/-", perr[1] )
+        # print("mu: ", coeff[2],"+/-", perr[2]  )
+        # print("sigma: ", coeff[3],"+/-", perr[3]  )
+
+        if plot == True:
+            plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
+            plt.show()
+
+        charge_sharing = 1.0*np.sum(df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].electrons_x)/np.sum(df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].electrons_y)
+
+        return coeff[0], perr[0], coeff[1], perr[1], coeff[2], perr[2], coeff[3], perr[3], charge_sharing
+
+    except:
+        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
