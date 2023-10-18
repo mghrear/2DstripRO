@@ -651,10 +651,9 @@ def annotate_heatmap(im, data=None, valfmt="{x:.0f}", textcolors=("black", "whit
             texts.append(text)
 
     return texts
-        
-# Fit a Crystal Ball function to fe55 events fiducial on a specified VMM combination
-# Return relavent values
-def fitCB(df_cluster, n_vmm_x,n_vmm_y, min_hits, plot=True):
+
+# Fiducializes dataframe so that clusters are contained in a specified vmm in x and y
+def fiducializeVMM(df_cluster, n_vmm_x,n_vmm_y, min_hits):
 
     # fiducialize events based on selected vmm combo
     if (n_vmm_x == 2) and (n_vmm_y == 10):
@@ -668,14 +667,39 @@ def fitCB(df_cluster, n_vmm_x,n_vmm_y, min_hits, plot=True):
     else:
         raise Exception("provide valid vmm combo")
 
-    # only perform the fit if there are more than 5 examples
-    try:
+    df_fid = df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].reset_index(drop=True)
 
+    return df_fid
+
+# Fiducializes dataframe so that clusters are contained in a specified quadrant
+def fiducializeQuadrant(df_cluster, x_loc,y_loc, min_hits):
+
+    # fiducialize events based on selected quadrant
+    if (x_loc == "xL") and (y_loc == "yL"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 125 ) & (max(row.strips0) <= 249  ) & (min(row.strips1) >= 125  ) & (max(row.strips1) <=  249 )  ,axis = 1)
+    elif (x_loc == "xL") and (y_loc == "yH"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 125 ) & (max(row.strips0) <= 249  ) & (min(row.strips1) >= 250  ) & (max(row.strips1) <=  374 )  ,axis = 1)
+    elif (x_loc == "xH") and (y_loc == "yL"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 250 ) & (max(row.strips0) <= 374  ) & (min(row.strips1) >= 125  ) & (max(row.strips1) <=  249 )  ,axis = 1)
+    elif (x_loc == "xH") and (y_loc == "yH"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 250 ) & (max(row.strips0) <= 374  ) & (min(row.strips1) >= 250  ) & (max(row.strips1) <=  374 )  ,axis = 1)
+    else:
+        raise Exception("provide valid quadrant")
+
+    df_fid = df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ]
+
+    return df_fid
+
+        
+# Fit a Crystal Ball function to fe55 events
+# Return relavent values
+def fitCB(df, plot=True):
+
+    try:
         # Get gain values
-        gain = df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].gain
+        gain = df.gain
         # Keep only gain entries with z-score < 3 (exclude outlier which may be cosmic tracks or nuclear recoils)
         gain =  gain[(np.abs(stats.zscore(gain)) < 3)]
-
 
         xmin = 0
         xmax = gain.max()
@@ -688,18 +712,9 @@ def fitCB(df_cluster, n_vmm_x,n_vmm_y, min_hits, plot=True):
         # Get error bars for bins
         n_err = np.sqrt(hist[nz])
 
-        if plot == True:
-            # Create Python Histogram, use density this time
-            plt.figure()
-            hist2, bin_edges2, patches2 = plt.hist(gain,nbins,(xmin,xmax), density = True, color='g',alpha=0.6)
-            bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
-            plt.xlabel("Gain")
-            plt.ylabel("Count")
-        else:
-
-            # Create Python Histogram, use density this time
-            hist2, bin_edges2 = np.histogram(gain,nbins,(xmin,xmax), density = True)
-            bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
+        # Create numpy Histogram, use density this time
+        hist2, bin_edges2 = np.histogram(gain,nbins,(xmin,xmax), density = True)
+        bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
 
         # Guess mu as bin_center with most hits
         mu_guess = bin_centers2[np.argmax(hist2)]
@@ -716,18 +731,72 @@ def fitCB(df_cluster, n_vmm_x,n_vmm_y, min_hits, plot=True):
 
         perr = np.sqrt(np.diag(covar))
 
-        # print("beta: ", coeff[0], "+/-", perr[0] )
-        # print("m: ", coeff[1], "+/-", perr[1] )
-        # print("mu: ", coeff[2],"+/-", perr[2]  )
-        # print("sigma: ", coeff[3],"+/-", perr[3]  )
+        if np.absolute(perr[2]) > np.absolute(coeff[2]):
+            raise Exception("Poor fit")
+
 
         if plot == True:
+            plt.figure()
+            hist2, bin_edges2, patches2 = plt.hist(gain,nbins,(xmin,xmax), density = True, color='g',alpha=0.6)
+            bin_centers2 = (bin_edges2[1:]+bin_edges2[:-1])/2.
+            plt.xlabel("Gain")
+            plt.ylabel("Count")
             plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
             plt.show()
 
-        charge_sharing = 1.0*np.sum(df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].electrons_x)/np.sum(df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].electrons_y)
+        charge_sharing = 1.0*np.sum(df.electrons_x)/np.sum(df.electrons_y)
+
 
         return coeff[0], perr[0], coeff[1], perr[1], coeff[2], perr[2], coeff[3], perr[3], charge_sharing
 
     except:
+        print("-fit failed-")
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+
+def fitGauss(df,plot=True):
+
+    try:
+        # collect time offsets
+        offsets = df.maxADC_offset
+
+        # Histogram the charge distribution for fe55 events in the specified time period
+        xmin = offsets.min()
+        xmax = offsets.max()
+        nbins = 50
+
+        hist, bin_edges = np.histogram(offsets,nbins,(xmin,xmax))
+        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2.
+
+        # Find non-zero bins in Histogram
+        nz = hist>0
+        # Get posssion error bars for non-zero bins
+        n_err = np.sqrt(hist[nz])
+
+
+        # Fit Gaussian to binned data
+        coeff, covar = curve_fit(gaus, bin_centers[nz], hist[nz], sigma=n_err, absolute_sigma=True, p0=(0,100,0,20))
+        # Compute fit (statistical) errors
+        perr = np.sqrt(np.diag(covar))
+
+        # If the uncertainty is too high, the fit has failed
+        if ( np.absolute(perr[2]) > 0.25*np.absolute(coeff[2])) or ( np.absolute(perr[3]) > 0.25*np.absolute(coeff[3])) :
+            raise Exception("Poor fit")
+
+        if plot == True:
+            plt.figure()
+            hist, bin_edges,patches = plt.hist(offsets,nbins,(xmin,xmax), color='g',alpha=0.6)
+            plt.xlabel("Max ADC Time Offset")
+            plt.ylabel("Count")
+            f_opti = gaus(bin_centers,*coeff)
+            plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
+            plt.axvline(3*coeff[3]+coeff[2])
+            plt.show()
+
+
+
+        return coeff[2], perr[2], coeff[3], perr[3]
+    
+    except:
+
+        print("-fit failed-")
+        return np.nan, np.nan, np.nan, np.nan
