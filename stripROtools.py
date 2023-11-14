@@ -107,7 +107,12 @@ def gaus(x, y_off, const, mu, sigma):
     return y_off + const* np.exp(-0.5*((x - mu)/sigma)**2)
 
 
-# Creates an object which manages all configand calib informatuion
+# Horizontal fit Function
+def horizontal(x, H):
+    return H
+
+
+# Creates an object which manages all config and calib informatuion
 class VMMconfig:
     
     def __init__(self, strip_map_loc = None, pedestal_loc = None, THL_DAC_loc = None, PLSR_DAC_loc = None, THL_loc = None):
@@ -251,7 +256,6 @@ class VMMconfig:
         return df_suggested_DAC
 
 
-
 # Track-level class for reconstructing and visualizing
 class TrackTools:
     
@@ -281,9 +285,14 @@ class TrackTools:
         self.pitch_x = pitch_x
         self.pitch_y = pitch_y
         
-    def TimeHistView(self, t_max = 160, t_bin = 10):
+    def TimeHistView(self, t_bin = 10):
+
+        t_max = int(max(np.max(self.times_x),np.max(self.times_y)))
+
 
         time_edges = np.arange(0, t_max, t_bin)
+
+        print(self.times_x)
         
         plt.figure()
         plt.hist(self.times_x, bins = time_edges, histtype="step",color='k',label= "x strips")
@@ -322,7 +331,7 @@ class TrackTools:
         # Plot the 2D histogram
         plt.figure()
         plt.hist2d(x_vals, y_vals, bins=(x_edges, y_edges), weights=weights, cmap=plt.cm.jet)
-        plt.colorbar()
+        plt.colorbar(label="No. electrons")
         plt.xlabel("Strips x")
         plt.ylabel("Strips y")
 
@@ -336,7 +345,106 @@ class TrackTools:
             plt.axis([xmin, xmax, ymin, ymax])
 
         plt.show()
+
+    def Strip2DView_times(self,fullview = True):
+                
+        # Define empty arrays to store 2D histogram information
+        x_vals = np.array([],dtype=int)
+        y_vals = np.array([],dtype=int)
+        weights = np.array([])
         
+        # Loop through x strip data
+        for x_hit,time_x in zip(self.strips_x,self.times_x):
+            for y_hit,time_y in zip(self.strips_y,self.times_y):
+
+                x_vals = np.append( x_vals, x_hit )
+                y_vals = np.append( y_vals, y_hit )
+                weights = np.append(weights, (time_x+time_y)/2.0 )
+            
+        
+        # Define 2D histogram edges
+        x_edges = np.arange(-0.5,self.n_strips_x + 1.5,1)
+        y_edges = np.arange(-0.5,self.n_strips_y + 1.5,1)
+        
+        # Plot the 2D histogram
+        plt.figure()
+        plt.hist2d(x_vals, y_vals, bins=(x_edges, y_edges), weights=weights, cmap=plt.cm.jet)
+        plt.colorbar(label="Mean time [ns]")
+        plt.xlabel("Strips x")
+        plt.ylabel("Strips y")
+
+        #fullview shows entire readout, otherwise the display zooms into the event
+        if fullview == False:            
+            Mrange = max(max(self.strips_x)-min(self.strips_x), max(self.strips_y)-min(self.strips_y) )
+            xmin = min(self.strips_x)- Mrange
+            xmax = max(self.strips_x)+ Mrange
+            ymin = min(self.strips_y)- Mrange
+            ymax = max(self.strips_y)+ Mrange
+            plt.axis([xmin, xmax, ymin, ymax])
+
+        plt.show()
+
+    def prune_track(self, T_L = 40, T_H=250):
+
+        # For each x hit, compute the time difference to its neighboring strip on the left and right hand side
+        Txdiff = np.absolute(np.diff(self.times_x))
+        Txdiff_L = np.append(Txdiff[0],Txdiff)
+        Txdiff_R = np.append(Txdiff,Txdiff[-1])
+        # For each x hit, compute the distance (in strips) to the neighboring strip on the left and right hand side
+        Sxdiff = np.absolute(np.diff(self.strips_x))
+        Sxdiff_L = np.append(Sxdiff[0],Sxdiff)
+        Sxdiff_R = np.append(Sxdiff,Sxdiff[-1])
+
+        # Now find the minimum of time/strips on the left vs right hand side
+        xdiff = np.minimum(Txdiff_L/Sxdiff_L,Txdiff_R/Sxdiff_R)
+
+        # For each y hit, compute the time difference to its neighboring strip on the left and right hand side
+        Tydiff = np.absolute(np.diff(self.times_y))
+        Tydiff_L = np.append(Tydiff[0],Tydiff)
+        Tydiff_R = np.append(Tydiff,Tydiff[-1])
+        # For each x hit, compute the distance (in strips) to the neighboring strip on the left and right hand side
+        Sydiff = np.absolute(np.diff(self.strips_y))
+        Sydiff_L = np.append(Sydiff[0],Sydiff)
+        Sydiff_R = np.append(Sydiff,Sydiff[-1])
+
+        # Now find the minimum of time/strips on the left vs right hand side
+        ydiff = np.minimum(Tydiff_L/Sydiff_L,Tydiff_R/Sydiff_R)
+
+        # Use min time/strip to remove bad hits
+        self.strips_x = self.strips_x[ (xdiff>T_L) & (xdiff<T_H)]
+        self.strips_y = self.strips_y[ (ydiff>T_L) & (ydiff<T_H)]
+        self.ADC_x = self.ADC_x[ (xdiff>T_L) & (xdiff<T_H)]
+        self.ADC_y = self.ADC_y[ (ydiff>T_L) & (ydiff<T_H)]
+        self.times_x = self.times_x[ (xdiff>T_L) & (xdiff<T_H)]
+        self.times_y = self.times_y[ (ydiff>T_L) & (ydiff<T_H)]
+
+    def prune_track2(self, gap=2):
+        
+        # For each x hit, compute the distance (in strips) to the neighboring strip on the left and right hand side
+        xdiffs = np.diff(self.strips_x)
+        xdiffs_L = np.append(xdiffs[0],xdiffs)
+        xdiffs_R = np.append(xdiffs,xdiffs[-1])
+
+        # Now find the minimum distance on the left vs right hand side
+        min_xdiffs = np.minimum(xdiffs_L,xdiffs_R)
+
+        # For each y hit, compute the distance (in strips) to the neighboring strip on the left and right hand side
+        ydiffs = np.diff(self.strips_y)
+        ydiffs_L = np.append(ydiffs[0],ydiffs)
+        ydiffs_R = np.append(ydiffs,ydiffs[-1])
+
+        # Now find the minimum distance on the left vs right hand side
+        min_ydiffs = np.minimum(ydiffs_L,ydiffs_R)
+
+        # Use this to remove isolated hits which are usually noise
+        self.strips_x = self.strips_x[ min_xdiffs <= gap ]
+        self.strips_y = self.strips_y[ min_ydiffs <= gap ]
+        self.ADC_x = self.ADC_x[ min_xdiffs <= gap ]
+        self.ADC_y = self.ADC_y[ min_ydiffs <= gap ]
+        self.times_x = self.times_x[ min_xdiffs <= gap ]
+        self.times_y = self.times_y[ min_ydiffs <= gap ]
+
+
     def Reconst3D_v0 (self, plot = True):
 
 
@@ -387,7 +495,7 @@ class TrackTools:
             
             ax.scatter(x_vals, y_vals, z_vals, c=scalarMap.to_rgba(weights),s=300)
             scalarMap.set_array(weights)
-            fig.colorbar(scalarMap)
+            fig.colorbar(scalarMap,label="No. electrons")
 
             # Force all axis to have equal limits
             extents = np.array([getattr(ax, 'get_{}lim'.format(dim))() for dim in 'xyz'])
@@ -515,7 +623,7 @@ class TrackTools:
                 
                 ax.scatter(x_vals, y_vals, z_vals, c=scalarMap.to_rgba(weights),s=300)
                 scalarMap.set_array(weights)
-                fig.colorbar(scalarMap)
+                fig.colorbar(scalarMap,label="No. electrons")
 
                 # Force all axis to have equal limits
                 extents = np.array([getattr(ax, 'get_{}lim'.format(dim))() for dim in 'xyz'])
@@ -653,19 +761,32 @@ def annotate_heatmap(im, data=None, valfmt="{x:.0f}", textcolors=("black", "whit
     return texts
 
 # Fiducializes dataframe so that clusters are contained in a specified vmm in x and y
-def fiducializeVMM(df_cluster, n_vmm_x,n_vmm_y, min_hits):
+# Must select a map ('UH' or 'UoS')
+def fiducializeVMM(df_cluster, n_vmm_x,n_vmm_y, min_hits, map):
 
-    # fiducialize events based on selected vmm combo
-    if (n_vmm_x == 2) and (n_vmm_y == 10):
+    # fiducialize events based on selected vmm combo and map
+    if (n_vmm_x == 2) and (n_vmm_y == 10) and (map == "UH"):
         df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 156 ) & (max(row.strips0) <= 217  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
-    elif (n_vmm_x == 2) and (n_vmm_y == 13):
+    elif (n_vmm_x == 2) and (n_vmm_y == 13) and (map == "UH"):
         df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 156 ) & (max(row.strips0) <= 217  ) & (min(row.strips1) >= 280  ) & (max(row.strips1) <=  342 )  ,axis = 1)
-    elif (n_vmm_x == 5) and (n_vmm_y == 10):
-        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 280 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
-    elif (n_vmm_x == 5) and (n_vmm_y == 13):
+    elif (n_vmm_x == 5) and (n_vmm_y == 10) and (map == "UH"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 230 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
+    elif (n_vmm_x == 5) and (n_vmm_y == 13) and (map == "UH"):
         df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 280 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 280  ) & (max(row.strips1) <=  342 )  ,axis = 1)
+
+
+
+
+    elif (n_vmm_x == 2) and (n_vmm_y == 10) and (map == "UoS"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 179 ) & (max(row.strips0) <= 233  ) & (min(row.strips1) >= 64  ) & (max(row.strips1) <=  120 )  ,axis = 1)
+    elif (n_vmm_x == 2) and (n_vmm_y == 13) and (map == "UoS"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 179 ) & (max(row.strips0) <= 233  ) & (min(row.strips1) >= 122  ) & (max(row.strips1) <=  178 )  ,axis = 1)
+    elif (n_vmm_x == 5) and (n_vmm_y == 10) and (map == "UoS"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 236 ) & (max(row.strips0) <= 293  ) & (min(row.strips1) >= 64  ) & (max(row.strips1) <=  120 )  ,axis = 1)
+    elif (n_vmm_x == 5) and (n_vmm_y == 13) and (map == "UoS"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 236 ) & (max(row.strips0) <= 293  ) & (min(row.strips1) >= 122  ) & (max(row.strips1) <=  178 )  ,axis = 1)
     else:
-        raise Exception("provide valid vmm combo")
+        raise Exception("provide valid map / vmm combo")
 
     df_fid = df_cluster.loc[ (df_cluster.flag == True) & (df_cluster.nhits >= min_hits) ].reset_index(drop=True)
 
@@ -692,7 +813,6 @@ def fiducializeQuadrant(df_cluster, x_loc,y_loc, min_hits):
 
         
 # Fit a Crystal Ball function to fe55 events
-# Return relavent values
 def fitCB(df, plot=True):
 
     try:
@@ -753,11 +873,20 @@ def fitCB(df, plot=True):
         print("-fit failed-")
         return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
 
-def fitGauss(df,plot=True):
+
+# Fit a Gaussian to x/y time offset distribution 
+# There are two methods for obtaining the x/y time offset distribution "max_ADC" and "mean_time"
+def fit_offset(df, method = "max_ADC", plot=True):
 
     try:
         # collect time offsets
-        offsets = df.maxADC_offset
+        if method == "max_ADC":
+            offsets = df.maxADC_offset
+        elif method == "mean_time":
+            offsets = df.mean_offset
+        else:
+            raise Exception("Select Method: max_ADC or mean_time")
+
 
         # Histogram the charge distribution for fe55 events in the specified time period
         xmin = offsets.min()
@@ -772,20 +901,19 @@ def fitGauss(df,plot=True):
         # Get posssion error bars for non-zero bins
         n_err = np.sqrt(hist[nz])
 
-
         # Fit Gaussian to binned data
         coeff, covar = curve_fit(gaus, bin_centers[nz], hist[nz], sigma=n_err, absolute_sigma=True, p0=(0,100,0,20))
         # Compute fit (statistical) errors
         perr = np.sqrt(np.diag(covar))
 
         # If the uncertainty is too high, the fit has failed
-        if ( np.absolute(perr[2]) > 0.25*np.absolute(coeff[2])) or ( np.absolute(perr[3]) > 0.25*np.absolute(coeff[3])) :
+        if ( np.absolute(perr[2]) > 0.25*np.absolute(coeff[2])) or ( np.absolute(perr[3]) > 0.25*np.absolute(coeff[3]) ) or np.isnan(perr[2]) or np.isnan(perr[3]) :
             raise Exception("Poor fit")
 
         if plot == True:
             plt.figure()
             hist, bin_edges,patches = plt.hist(offsets,nbins,(xmin,xmax), color='g',alpha=0.6)
-            plt.xlabel("Max ADC Time Offset")
+            plt.xlabel("Time Offset")
             plt.ylabel("Count")
             f_opti = gaus(bin_centers,*coeff)
             plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
@@ -800,3 +928,27 @@ def fitGauss(df,plot=True):
 
         print("-fit failed-")
         return np.nan, np.nan, np.nan, np.nan
+
+
+
+# Fit a Gaussian to x/y time offset distribution 
+# There are two methods for obtaining the x/y time offset distribution "max_ADC" and "mean_time"
+def fit_horizontal(x_vals, y_vals, y_errs):
+
+    
+    try:
+        # Only fit the non nan entries
+        x_vals = np.array(x_vals)[~np.isnan( np.array(y_vals))]
+        y_errs = np.array(y_errs)[~np.isnan( np.array(y_vals))]
+        y_vals = np.array(y_vals)[~np.isnan( np.array(y_vals))]
+
+        # Fit Gaussian to binned data
+        coeff, covar = curve_fit(horizontal, x_vals, y_vals, sigma=y_errs, absolute_sigma=True, p0=(0))
+        # Compute fit (statistical) errors
+        perr = np.sqrt(np.diag(covar))
+
+        return coeff[0], perr[0]
+    
+    except:
+        print("-fit failed-")
+        return np.nan, np.nan
