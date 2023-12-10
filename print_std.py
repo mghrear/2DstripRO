@@ -41,7 +41,6 @@ all_z = np.array([])
 all_x_err = np.array([])
 all_y_err = np.array([])
 
-print(df_cut)
 
 for indx in range(len(df_cut)):
 
@@ -57,8 +56,6 @@ for indx in range(len(df_cut)):
 		dsp.prune_track2(gap=2)
 		x,y,z,c = dsp.Reconst3D_v1( mu = -6.68, sigma = 16.4 , n_sigma = 3, plot = False)
 
-		print(x)
-
 		# Only consider tracks with 5 or more points
 		if len(x) > 5:
 
@@ -67,6 +64,10 @@ for indx in range(len(df_cut)):
 
 			x_errs = err[:,0]
 			y_errs = err[:,1]
+
+			print(x_errs)
+			print(y_errs)
+			print(z_vals)
 
 			all_z = np.append(all_z,z_vals)
 			all_x_err = np.append(all_x_err,x_errs)
