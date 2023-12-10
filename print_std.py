@@ -41,6 +41,8 @@ all_z = np.array([])
 all_x_err = np.array([])
 all_y_err = np.array([])
 
+print(df_cut)
+
 for indx in range(len(df_cut)):
 
 	try:
