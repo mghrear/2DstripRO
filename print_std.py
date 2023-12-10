@@ -37,6 +37,31 @@ df_cut=df_cut.reset_index(drop=True)
 
 print("Number of remaining events: ", len(df_cut) )
 
+
+def get_ErrVecs(x_vals,y_vals,z_vals,charges):
+	
+	X = np.array([x_vals,y_vals,z_vals]).T
+	# 1) Center on barycenter
+	# Barycenter is the charge-weighted mean position
+	x_b = np.sum(X*(charges.reshape(len(charges),1)),axis=0)/np.sum(charges)
+	# Shift data to barycenter
+	X = X-x_b
+	# 2) Find principle axis
+	# Use charges for weights
+	W = charges.reshape(len(charges),1)
+	# Compute weighted covariance matrix
+	WCM = ( (W*X).T @ X ) / np.sum(W)
+	U1,S1,D1 =  np.linalg.svd(WCM)
+	v_PA = np.array([D1[0][0],D1[0][1],D1[0][2]])
+	v_PA = np.sign(v_PA[2]) * v_PA
+	
+	# projection of mean-centered position onto principle axis
+	proj = np.array([(X@v_PA)*v_PA[0],(X@v_PA)*v_PA[1],(X@v_PA)*v_PA[2]]).T
+	# Mismeasurement vectors
+	# The distribution of the x and y values gives us sigma x and sigma y
+	err =X-proj
+	return x_vals,y_vals,z_vals,charges,v_PA,x_b,err
+
 all_z = np.array([])
 all_x_err = np.array([])
 all_y_err = np.array([])
@@ -65,10 +90,6 @@ for indx in range(len(df_cut)):
 			x_errs = err[:,0]
 			y_errs = err[:,1]
 
-			print("here")
-			print(x_errs)
-			print(y_errs)
-			print(z_vals)
 
 			all_z = np.append(all_z,z_vals)
 			all_x_err = np.append(all_x_err,x_errs)
