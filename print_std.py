@@ -3,6 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import stripROtools
 
+from scipy import stats
+from scipy.optimize import curve_fit
+from scipy.stats import crystalball
+
 # Location of data
 file_loc = ["/Users/majdghrear/data/VMM3a_SRS/AUG23/UH_DLC/Po210/540Vmesh_bc_40p000_tac_60_ccs_6_cs_3_dt_200_mst_15_spc_1500_dp_400_cr_0p20-2p00_coin_center-of-mass_test.root", "/Users/majdghrear/data/VMM3a_SRS/AUG23/UH_DLC/Po210/540Vmesh_2_bc_40p000_tac_60_ccs_6_cs_3_dt_200_mst_15_spc_1500_dp_400_cr_0p20-2p00_coin_center-of-mass_test.root"]
 
@@ -88,10 +92,7 @@ def fit_gauss(offsets):
 		
 	return coeff[2], perr[2], coeff[3], perr[3]
     
-    except:
 
-        print("-fit failed-")
-        return np.nan, np.nan, np.nan, np.nan
 
 all_z = np.array([])
 all_x_err = np.array([])
