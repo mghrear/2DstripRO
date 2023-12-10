@@ -86,9 +86,6 @@ def fit_gauss(offsets):
 	# Compute fit (statistical) errors
 	perr = np.sqrt(np.diag(covar))
 	
-	# If the uncertainty is too high, the fit has failed
-	if ( np.absolute(perr[2]) > 0.25*np.absolute(coeff[2])) or ( np.absolute(perr[3]) > 0.25*np.absolute(coeff[3]) ) or np.isnan(perr[2]) or np.isnan(perr[3]) :
-		raise Exception("Poor fit")
 		
 	return coeff[2], perr[2], coeff[3], perr[3]
     
