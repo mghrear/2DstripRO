@@ -64,45 +64,29 @@ def get_ErrVecs(x_vals,y_vals,z_vals,charges):
 
 # Gaussian Function
 def gaus(x, y_off, const, mu, sigma):
-    return y_off + const* np.exp(-0.5*((x - mu)/sigma)**2)
-	
+	return y_off + const* np.exp(-0.5*((x - mu)/sigma)**2)
+
 def fit_gauss(offsets):
-	
 	# Histogram the charge distribution for fe55 events in the specified time period
-        xmin = offsets.min()
-        xmax = offsets.max()
-        nbins = 20
-
-        hist, bin_edges = np.histogram(offsets,nbins,(xmin,xmax))
-        bin_centers = (bin_edges[1:]+bin_edges[:-1])/2.
-
-        # Find non-zero bins in Histogram
-        nz = hist>0
-        # Get posssion error bars for non-zero bins
-        n_err = np.sqrt(hist[nz])
-
-        # Fit Gaussian to binned data
-        coeff, covar = curve_fit(gaus, bin_centers[nz], hist[nz], sigma=n_err, absolute_sigma=True, p0=(0,1,0,50))
-        # Compute fit (statistical) errors
-        perr = np.sqrt(np.diag(covar))
-
-        # If the uncertainty is too high, the fit has failed
-        if ( np.absolute(perr[2]) > 0.25*np.absolute(coeff[2])) or ( np.absolute(perr[3]) > 0.25*np.absolute(coeff[3]) ) or np.isnan(perr[2]) or np.isnan(perr[3]) :
-            raise Exception("Poor fit")
-
-        if plot == True:
-            plt.figure()
-            hist, bin_edges,patches = plt.hist(offsets,nbins,(xmin,xmax), color='g',alpha=0.6)
-            plt.xlabel("Time Offset")
-            plt.ylabel("Count")
-            f_opti = gaus(bin_centers,*coeff)
-            plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
-            plt.axvline(3*coeff[3]+coeff[2])
-            plt.show()
-
-
-
-        return coeff[2], perr[2], coeff[3], perr[3]
+	xmin = offsets.min()
+	xmax = offsets.max()
+	nbins = 20
+	hist, bin_edges = np.histogram(offsets,nbins,(xmin,xmax))
+	bin_centers = (bin_edges[1:]+bin_edges[:-1])/2.
+	# Find non-zero bins in Histogram
+	nz = hist>0
+	# Get posssion error bars for non-zero bins
+	n_err = np.sqrt(hist[nz])
+	# Fit Gaussian to binned data
+	coeff, covar = curve_fit(gaus, bin_centers[nz], hist[nz], sigma=n_err, absolute_sigma=True, p0=(0,1,0,50))
+	# Compute fit (statistical) errors
+	perr = np.sqrt(np.diag(covar))
+	
+	# If the uncertainty is too high, the fit has failed
+	if ( np.absolute(perr[2]) > 0.25*np.absolute(coeff[2])) or ( np.absolute(perr[3]) > 0.25*np.absolute(coeff[3]) ) or np.isnan(perr[2]) or np.isnan(perr[3]) :
+		raise Exception("Poor fit")
+		
+	return coeff[2], perr[2], coeff[3], perr[3]
     
     except:
 
