@@ -103,8 +103,6 @@ for indx in range(len(df_cut)):
 # Switch to cm
 all_z = all_z*1E-4
 
-print(all_x_err)
-
 
 for z_low in np.arange(0,1.2,0.2):
 
@@ -113,7 +111,6 @@ for z_low in np.arange(0,1.2,0.2):
 	#make data cut
 	data_cut = (all_z > z_low) & (all_z < z_high)
 
-	print(all_x_err[data_cut]) 
 	print("abs. z = ", (z_low+z_high)/2.0 )
 	print("x std = ", np.std(all_x_err[data_cut]))
 	print("y std = ", np.std(all_y_err[data_cut]))
