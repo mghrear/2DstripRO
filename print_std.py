@@ -76,6 +76,8 @@ for indx in range(len(df_cut)):
 # Switch to cm
 all_z = all_z*1E-4
 
+print(all_x_err)
+
 
 for z_low in np.arange(0,1.2,0.2):
 
