@@ -62,7 +62,10 @@ def get_ErrVecs(x_vals,y_vals,z_vals,charges):
 	err =X-proj
 	return x_vals,y_vals,z_vals,charges,v_PA,x_b,err
 
-
+# Gaussian Function
+def gaus(x, y_off, const, mu, sigma):
+    return y_off + const* np.exp(-0.5*((x - mu)/sigma)**2)
+	
 def fit_gauss(offsets):
 	
 	# Histogram the charge distribution for fe55 events in the specified time period
@@ -79,7 +82,7 @@ def fit_gauss(offsets):
         n_err = np.sqrt(hist[nz])
 
         # Fit Gaussian to binned data
-        coeff, covar = curve_fit(gaus, bin_centers[nz], hist[nz], sigma=n_err, absolute_sigma=True, p0=(0,100,0,20))
+        coeff, covar = curve_fit(gaus, bin_centers[nz], hist[nz], sigma=n_err, absolute_sigma=True, p0=(0,1,0,50))
         # Compute fit (statistical) errors
         perr = np.sqrt(np.diag(covar))
 
@@ -155,7 +158,14 @@ for z_low in np.arange(0,1.2,0.2):
 	#make data cut
 	data_cut = (all_z > z_low) & (all_z < z_high)
 
+	x_mu, x_mu_err, x_sigma, x_sigma_err = fit_gauss(all_x_err[data_cut])
+	y_mu, y_mu_err, y_sigma, y_sigma_err = fit_gauss(all_y_err[data_cut])
+
 	print("abs. z = ", (z_low+z_high)/2.0 )
 	print("x std = ", np.std(all_x_err[data_cut]))
 	print("y std = ", np.std(all_y_err[data_cut]))
+	print(x_mu, x_mu_err, x_sigma, x_sigma_err)
+	print(y_mu, y_mu_err, y_sigma, y_sigma_err)
 	print("----------------------------------")
+
+
