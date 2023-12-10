@@ -65,6 +65,7 @@ for indx in range(len(df_cut)):
 			x_errs = err[:,0]
 			y_errs = err[:,1]
 
+			print("here")
 			print(x_errs)
 			print(y_errs)
 			print(z_vals)
