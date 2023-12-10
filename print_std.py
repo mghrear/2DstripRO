@@ -57,6 +57,8 @@ for indx in range(len(df_cut)):
 		dsp.prune_track2(gap=2)
 		x,y,z,c = dsp.Reconst3D_v1( mu = -6.68, sigma = 16.4 , n_sigma = 3, plot = False)
 
+		print(x)
+
 		# Only consider tracks with 5 or more points
 		if len(x) > 5:
 
