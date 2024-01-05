@@ -112,6 +112,19 @@ def horizontal(x, H):
     return H
 
 
+# Exponential plateau fit function
+def exp_plat(x, a, b, c):
+	return a * (1.0 - np.e**(-b * (x - c)))
+
+
+# exponential decay fit function
+def invs(x, a, b):
+	return (1.0/(a*x)) + b
+
+# linear fit function
+def linear(x, a, b):
+	return (a * x) + b
+    
 # Creates an object which manages all config and calib informatuion
 class VMMconfig:
     
