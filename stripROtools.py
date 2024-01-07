@@ -124,6 +124,16 @@ def invs(x, a, b):
 # linear fit function
 def linear(x, a, b):
 	return (a * x) + b
+
+
+# townsend gain eqn fit function
+def townsend(X, A, B, m):
+
+    V,t = X # V is the mesh voltage [V] and t is the amplifcation gap [m]
+
+    p = 101325 # p is pressure in Pa
+    
+    return A * ( (V/t) / p )**m * np.exp( -B * ( ( p / (V/t) )**(1-m) ) )
     
 # Creates an object which manages all config and calib informatuion
 class VMMconfig:
