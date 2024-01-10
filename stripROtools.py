@@ -133,7 +133,19 @@ def townsend(X, A, B, m):
 
     p = 101325 # p is pressure in Pa
     
-    return A * ( (V/t) / p )**m * np.exp( -B * ( ( p / (V/t) )**(1-m) ) )
+    return A * ( ( (V/t) / p )**m ) * np.exp( -B * ( ( p / (V/t) )**(1-m) ) ) * p * t
+
+
+# townsend gain eqn fit function
+def townsend_MG(X, A, B, C, m):
+
+    V,t = X # V is the mesh voltage [V] and t is the amplifcation gap [m]
+
+    p = 101325 # p is pressure in Pa
+    
+    return A * ( ( (V/t - C) / p )**m ) * np.exp( -B * ( ( p / (V/t - C) )**(1-m) ) ) * p * t
+
+
     
 # Creates an object which manages all config and calib informatuion
 class VMMconfig:
