@@ -805,7 +805,7 @@ def fiducializeVMM(df_cluster, n_vmm_x,n_vmm_y, min_hits, map):
     elif (n_vmm_x == 2) and (n_vmm_y == 13) and (map == "UH"):
         df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 156 ) & (max(row.strips0) <= 217  ) & (min(row.strips1) >= 280  ) & (max(row.strips1) <=  342 )  ,axis = 1)
     elif (n_vmm_x == 5) and (n_vmm_y == 10) and (map == "UH"):
-        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 230 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 280 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 156  ) & (max(row.strips1) <=  217 )  ,axis = 1)
     elif (n_vmm_x == 5) and (n_vmm_y == 13) and (map == "UH"):
         df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 280 ) & (max(row.strips0) <= 342  ) & (min(row.strips1) >= 280  ) & (max(row.strips1) <=  342 )  ,axis = 1)
 
