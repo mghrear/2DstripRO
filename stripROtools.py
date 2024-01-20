@@ -11,6 +11,19 @@ from scipy.stats import crystalball
 import json
 
 
+# Colorblind friendly color color palette
+colors = {
+    'black': '#000000',
+    'orange': '#E69F00',
+    'cyan': '#56B4E9',
+    'green': '#009E73',
+    'yellow': '#F0E442',
+    'blue': '#0072B2',
+    'red': '#D55E00',
+    'pink': '#CC79A7'
+}
+
+
 # Read the root file outputed by vmmsdat and converts it to a pandas dataframe
 # Input is a list containing the locations of the root files and flags for whether cluster and/or hit information should be included
 def read_root(files, clusters=True, hits=False):
@@ -813,13 +826,15 @@ def fiducializeVMM(df_cluster, n_vmm_x,n_vmm_y, min_hits, map):
 
 
     elif (n_vmm_x == 2) and (n_vmm_y == 10) and (map == "UoS"):
-        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 179 ) & (max(row.strips0) <= 233  ) & (min(row.strips1) >= 64  ) & (max(row.strips1) <=  120 )  ,axis = 1)
-    elif (n_vmm_x == 2) and (n_vmm_y == 13) and (map == "UoS"):
-        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 179 ) & (max(row.strips0) <= 233  ) & (min(row.strips1) >= 122  ) & (max(row.strips1) <=  178 )  ,axis = 1)
-    elif (n_vmm_x == 5) and (n_vmm_y == 10) and (map == "UoS"):
-        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 236 ) & (max(row.strips0) <= 293  ) & (min(row.strips1) >= 64  ) & (max(row.strips1) <=  120 )  ,axis = 1)
-    elif (n_vmm_x == 5) and (n_vmm_y == 13) and (map == "UoS"):
-        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 236 ) & (max(row.strips0) <= 293  ) & (min(row.strips1) >= 122  ) & (max(row.strips1) <=  178 )  ,axis = 1)
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 179 ) & (max(row.strips0) <= 235  ) & (min(row.strips1) >= 64  ) & (max(row.strips1) <=  121 )  ,axis = 1)
+    elif (n_vmm_x == 2) and (n_vmm_y == 12) and (map == "UoS"):
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 179 ) & (max(row.strips0) <= 235  ) & (min(row.strips1) >= 179  ) & (max(row.strips1) <=  235 )  ,axis = 1)
+    elif (n_vmm_x == 3) and (n_vmm_y == 10) and (map == "UoS"):
+        # use min(row.strips0) >= 140  instead of min(row.strips0) >= 122 to block out channels identified as noisey (events appear to be missing some charge causing second peak)
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 140 ) & (max(row.strips0) <= 178  ) & (min(row.strips1) >= 64  ) & (max(row.strips1) <=  121 )  ,axis = 1)
+    elif (n_vmm_x == 3) and (n_vmm_y == 12) and (map == "UoS"):
+        # use min(row.strips0) >= 140  instead of min(row.strips0) >= 122 to block out channels identified as noisey (events appear to be missing some charge causing second peak)
+        df_cluster["flag"]= df_cluster.apply(lambda row: (min(row.strips0) >= 140 ) & (max(row.strips0) <= 178  ) & (min(row.strips1) >= 179  ) & (max(row.strips1) <=  235 )  ,axis = 1)
     else:
         raise Exception("provide valid map / vmm combo")
 
@@ -855,6 +870,10 @@ def fitCB(df, plot=True):
         gain = df.gain
         # Keep only gain entries with z-score < 3 (exclude outlier which may be cosmic tracks or nuclear recoils)
         gain =  gain[(np.abs(stats.zscore(gain)) < 3)]
+
+        # Do not attempt fit if there are less then 100 examples
+        if len(gain) < 100:
+            raise Exception("Poor fit")
 
         xmin = 0
         xmax = gain.max()
@@ -899,7 +918,7 @@ def fitCB(df, plot=True):
             plt.plot(bin_centers, f_opti, 'r--', linewidth=2, label='curve_fit')
             plt.show()
 
-        charge_sharing = 1.0*np.sum(df.electrons_x)/np.sum(df.electrons_y)
+        charge_sharing = 1.0*np.mean(df.electrons_x/df.electrons_y)
 
 
         return coeff[0], perr[0], coeff[1], perr[1], coeff[2], perr[2], coeff[3], perr[3], charge_sharing
