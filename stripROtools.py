@@ -132,7 +132,7 @@ def exp_plat(x, a, b, c):
 
 # exponential decay fit function
 def invs(x, a, b):
-	return (1.0/(a*x)) + b
+	return np.sqrt((a/x)**2+(b)**2)
 
 # linear fit function
 def linear(x, a, b):
@@ -899,7 +899,11 @@ def fitCB(df, plot=True):
         n_err2 = (np.sqrt(hist[nz])/hist[nz]) * hist2[nz2] # Fractional error times hist value
 
         # Define Range and Fit :
-        coeff, covar = curve_fit(crystalball.pdf, bin_centers2[nz2], hist2[nz2], sigma=n_err2, absolute_sigma=True, p0=(1, 2,mu_guess,1600))
+        try:
+            coeff, covar = curve_fit(crystalball.pdf, bin_centers2[nz2], hist2[nz2], sigma=n_err2, absolute_sigma=True, p0=(1, 2,mu_guess,1600))
+        except:
+            coeff, covar = curve_fit(crystalball.pdf, bin_centers2[nz2], hist2[nz2], sigma=n_err2, absolute_sigma=True, p0=(2, 2,mu_guess,1600))
+
 
         f_opti = crystalball.pdf(bin_centers,*coeff)
 
@@ -919,13 +923,15 @@ def fitCB(df, plot=True):
             plt.show()
 
         charge_sharing = 1.0*np.mean(df.electrons_x/df.electrons_y)
+        mu_e_x = np.mean(df.electrons_x)
+        mu_e_y = np.mean(df.electrons_y)
 
 
-        return coeff[0], perr[0], coeff[1], perr[1], coeff[2], perr[2], coeff[3], perr[3], charge_sharing
+        return coeff[0], perr[0], coeff[1], perr[1], coeff[2], perr[2], coeff[3], perr[3], charge_sharing, mu_e_x, mu_e_y
 
     except:
         print("-fit failed-")
-        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
 
 
 # Fit a Gaussian to x/y time offset distribution 
