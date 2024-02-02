@@ -350,7 +350,7 @@ class TrackTools:
         plt.ylabel("No. Hits")
         plt.show()
 
-    def Strip2DView(self,fullview = True):
+    def Strip2DView(self,fullview = True, save_name = None ):
                 
         # Define empty arrays to store 2D histogram information
         x_vals = np.array([],dtype=int)
@@ -391,8 +391,13 @@ class TrackTools:
             ymin = min(self.strips_y)- Mrange
             ymax = max(self.strips_y)+ Mrange
             plt.axis([xmin, xmax, ymin, ymax])
+        
+
+        if save_name != None:
+            plt.savefig("./figures/"+save_name+".pdf")
 
         plt.show()
+
 
     def Strip2DView_times(self,fullview = True):
                 
@@ -564,7 +569,7 @@ class TrackTools:
         return x_vals, y_vals, z_vals, weights
         
 
-    def Reconst3D_v1 (self, mu = 4.1, sigma = 18.4 , n_sigma = 3, plot = True):
+    def Reconst3D_v1 (self, mu = 4.1, sigma = 18.4 , n_sigma = 3, plot = True, save_name = None ):
         # This 3D reconstruction algorithim only matches x and y hits if they are within a time window specified by mu, sigma, n_sigma
         # After x and y hits are matched, the x ADCs are spread evenly among all matched y hits and vice versa
         # The time is the average of the x hit time and y hit time
@@ -659,7 +664,7 @@ class TrackTools:
             weights = elec_M[Tarray]                            # Weight is number of electrons
             z_vals  = Time_M[Tarray] * self.v_drift             # multiply by drift speed for z
 
-            if plot == True:
+            if (plot == True) or (save_name != None):
                 # Plot the 3D scatter
                 fig = plt.figure()
                 ax = Axes3D(fig)
@@ -687,7 +692,10 @@ class TrackTools:
                 ax.set_ylabel('y [um]')
                 ax.set_zlabel('z [um]')
                 
-                plt.show()
+                if plot == True:
+                    plt.show()
+                if save_name != None:
+                    fig.savefig("./figures/"+save_name+".pdf")
 
             return x_vals, y_vals, z_vals, weights
         
