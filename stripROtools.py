@@ -119,6 +119,10 @@ read_hits = lambda  files: pd.concat( [read_hit(file) for file in files] ,ignore
 def gaus(x, y_off, const, mu, sigma):
     return y_off + const* np.exp(-0.5*((x - mu)/sigma)**2)
 
+# Gaussian Function with no offset
+def gaus2(x, const, mu, sigma):
+    return const* np.exp(-0.5*((x - mu)/sigma)**2)
+
 
 # Horizontal fit Function
 def horizontal(x, H):
@@ -307,7 +311,7 @@ class VMMconfig:
 # Track-level class for reconstructing and visualizing
 class TrackTools:
     
-    def __init__(self, event, gain_x=9.0, gain_y=4.5, n_strips_x = 512, n_strips_y=512, v_drift=8.0, pitch_x=200, pitch_y=200):
+    def __init__(self, event, gain_x=9.0, gain_y=4.5, n_strips_x = 500, n_strips_y=500, v_drift=8.0, pitch_x=200, pitch_y=200):
         
         # Hit level information
         self.strips_x = event.strips0
@@ -663,6 +667,7 @@ class TrackTools:
             y_vals = Stripy_M[Tarray]*self.pitch_y              # Multiply by pitch for physical distance
             weights = elec_M[Tarray]                            # Weight is number of electrons
             z_vals  = Time_M[Tarray] * self.v_drift             # multiply by drift speed for z
+            z_vals = z_vals - np.min(z_vals)                    # Shift z_vals so that minimum is at z=0
 
             if (plot == True) or (save_name != None):
                 # Plot the 3D scatter
@@ -1020,3 +1025,138 @@ def fit_horizontal(x_vals, y_vals, y_errs):
     except:
         print("-fit failed-")
         return np.nan, np.nan
+
+
+
+# A function to get the transverse mismeasurments of a 3D reconstrcuted alpha track
+def GetTransErrs(x_vals,y_vals,z_vals,charges):
+
+    X = np.array([x_vals,y_vals,z_vals]).T
+
+    # 1) Center on barycenter
+    # Barycenter is the charge-weighted mean position
+    x_b = np.sum(X*(charges.reshape(len(charges),1)),axis=0)/np.sum(charges)
+    # Shift data to barycenter
+    X = X-x_b
+
+    # 2) Find principle axis
+    # Use charges for weights
+    W = charges.reshape(len(charges),1)
+    # Compute weighted covariance matrix
+    WCM = ( (W*X).T @ X ) / np.sum(W)
+    U1,S1,D1 =  np.linalg.svd(WCM)
+    v_PA = np.array([D1[0][0],D1[0][1],D1[0][2]])
+
+    v_PA = np.sign(v_PA[2]) * v_PA
+
+    # projection of mean-centered position onto principle axis
+    proj = np.array([(X@v_PA)*v_PA[0],(X@v_PA)*v_PA[1],(X@v_PA)*v_PA[2]]).T
+
+    # Mismeasurement vectors
+    # The distribution of the x and y values gives us sigma x and sigma y
+    err =X-proj
+
+    # Compute transverse mismeasurements using method 1
+    delta_xs_1 = err[:,0]
+    delta_ys_1 = err[:,1]
+
+    # Compute transverse mismeasurements using method 2
+    delta_xs_2 = X[:,0] - ( ( v_PA[0] / v_PA[2] ) * X[:,2] ) 
+    delta_ys_2 = X[:,1] - ( ( v_PA[1] / v_PA[2] ) * X[:,2] )
+    
+    return z_vals, delta_xs_1, delta_ys_1, delta_xs_2, delta_ys_2, v_PA, x_b
+
+
+    
+
+
+# A function which bins missmeasurments in z and fits them to Gaussians, outputting the results
+def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.1, stop = 1.0, step = 0.2, plot = True):
+
+    abs_z = []
+    abs_z_std = []
+    x_sigmas = []
+    x_std = []
+    x_sigmas_err = []
+    y_sigmas = []
+    y_std = []
+    y_sigmas_err = []
+
+    for z_low in np.arange(start,stop,step):
+
+        try:
+
+            #make data cut
+            z_high = z_low + step
+            data_cut = (z_vals > z_low) & (z_vals < z_high)
+
+            abs_z_std += [round( (z_low+z_high)/2.0 ,2)]
+            x_std += [np.std(x_mis[data_cut])]
+            y_std += [np.std(y_mis[data_cut])]
+
+
+            xmin = -150
+            xmax = 150
+            ymin = -150
+            ymax = 150
+
+
+            nbins = 8
+
+            hist_x, bin_edges_x = np.histogram(x_mis[data_cut],nbins,(xmin,xmax))
+            hist_y, bin_edges_y = np.histogram(y_mis[data_cut],nbins,(ymin,ymax))
+
+            bin_centers_x = (bin_edges_x[1:]+bin_edges_x[:-1])/2.
+            bin_centers_y = (bin_edges_y[1:]+bin_edges_y[:-1])/2.
+
+            # Find non-zero bins in Histogram
+            nz_x = hist_x>0
+            nz_y = hist_y>0
+
+            # Get posssion error bars for non-zero bins
+            n_err_x = np.sqrt(hist_x[nz_x])
+            n_err_y = np.sqrt(hist_y[nz_y])
+
+            # Fit Gaussian to binned data
+            coeff_x, covar_x = curve_fit(gaus2, bin_centers_x[nz_x], hist_x[nz_x], sigma=n_err_x, absolute_sigma=True, p0=(100,0,50))
+            coeff_y, covar_y = curve_fit(gaus2, bin_centers_y[nz_y], hist_y[nz_y], sigma=n_err_y, absolute_sigma=True, p0=(100,0,50))
+
+            # Compute fit (statistical) errors
+            perr_x = np.sqrt(np.diag(covar_x))
+            perr_y = np.sqrt(np.diag(covar_y))
+
+            print("sigma x: ", coeff_x[2], "+/-", perr_x[2])
+            print("sigma y: ", coeff_y[2], "+/-", perr_y[2])
+
+            if plot == True:
+                plt.figure()
+                hist, bin_edges,patches = plt.hist(x_mis[data_cut],nbins,(xmin,xmax),color = colors["blue"], histtype="step", label = str( round( (z_low+z_high)/2.0 ,2) )+"abs. z, x")
+                plt.errorbar(bin_centers_x[nz_x], hist_x[nz_x], n_err_x,color = colors["blue"])
+                hist, bin_edges,patches = plt.hist(y_mis[data_cut],nbins,(ymin,ymax),color = colors["red"],histtype="step", label = str( round( (z_low+z_high)/2.0 ,2) )+"abs. z, y")
+                plt.errorbar(bin_centers_y[nz_y], hist_y[nz_y], n_err_y,color = colors["red"])
+                plt.xlabel("Transverse Mismeasurment [um]")
+                plt.ylabel("Count")
+
+                IV = np.arange(xmin,xmax,1)
+
+                f_opti_x = gaus2(IV,*coeff_x)
+                f_opti_y = gaus2(IV,*coeff_y)
+
+
+                plt.plot(IV, f_opti_x,color = colors["blue"], linestyle='--', linewidth=2)
+                plt.plot(IV, f_opti_y,color = colors["red"], linestyle='--', linewidth=2)
+                plt.legend()
+                plt.show()
+
+            abs_z += [round( (z_low+z_high)/2.0 ,2)]
+            x_sigmas += [coeff_x[2]]
+            x_sigmas_err += [perr_x[2]]
+            y_sigmas += [coeff_y[2]]
+            y_sigmas_err += [perr_y[2]]
+
+        except:
+            print("fit failed for z = ", str(round( (z_low+z_high)/2.0 ,2)))
+            
+
+
+    return abs_z, x_sigmas, x_sigmas_err, y_sigmas, y_sigmas_err, abs_z_std, x_std, y_std
