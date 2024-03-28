@@ -162,6 +162,15 @@ def townsend_MG(X, A, B, C, m):
     
     return A * ( ( (V/t - C) / p )**m ) * np.exp( -B * ( ( p / (V/t - C) )**(1-m) ) ) * p * t
 
+# townsend gain eqn fit function
+def townsend_MG2(X, A, B, C, D, m):
+
+    V,t = X # V is the mesh voltage [V] and t is the amplifcation gap [m]
+
+    p = 101325 # p is pressure in Pa
+    
+    return A * ( ( (V/t - C) / p )**m ) * np.exp( -B * ( ( p / (V/t - C) )**(1-m) ) ) * p * t + D
+
 
     
 # Creates an object which manages all config and calib informatuion
@@ -311,7 +320,7 @@ class VMMconfig:
 # Track-level class for reconstructing and visualizing
 class TrackTools:
     
-    def __init__(self, event, gain_x=9.0, gain_y=4.5, n_strips_x = 500, n_strips_y=500, v_drift=8.0, pitch_x=200, pitch_y=200):
+    def __init__(self, event, Mult_factor = 1.3, gain_x=9.0, gain_y=4.5, n_strips_x = 500, n_strips_y=500, v_drift=8.0, pitch_x=200, pitch_y=200):
         
         # Hit level information
         self.strips_x = event.strips0
@@ -323,8 +332,8 @@ class TrackTools:
         self.times_y = event.times1 - min(min(event.times0),min(event.times1))
         
         # Shaping amplifier gain in mV/fC
-        self.gain_x = gain_x
-        self.gain_y = gain_y
+        self.gain_x = gain_x * Mult_factor # Times the multiplicative factor found in Fe55_vmm.ipynb for agreement with PHA analysis
+        self.gain_y = gain_y * Mult_factor # Times the multiplicative factor found in Fe55_vmm.ipynb for agreement with PHA analysis
         
         # Total number of strips in x and y
         self.n_strips_x = n_strips_x
@@ -452,8 +461,8 @@ class TrackTools:
         Sxdiff_L = np.append(Sxdiff[0],Sxdiff)
         Sxdiff_R = np.append(Sxdiff,Sxdiff[-1])
 
-        # Now find the minimum of time/strips on the left vs right hand side
-        xdiff = np.minimum(Txdiff_L/Sxdiff_L,Txdiff_R/Sxdiff_R)
+        # Now find the min of time/strips on the left vs right hand side
+        xdiff = np.min([Txdiff_L/Sxdiff_L,Txdiff_R/Sxdiff_R],axis=0)
 
         # For each y hit, compute the time difference to its neighboring strip on the left and right hand side
         Tydiff = np.absolute(np.diff(self.times_y))
@@ -464,8 +473,8 @@ class TrackTools:
         Sydiff_L = np.append(Sydiff[0],Sydiff)
         Sydiff_R = np.append(Sydiff,Sydiff[-1])
 
-        # Now find the minimum of time/strips on the left vs right hand side
-        ydiff = np.minimum(Tydiff_L/Sydiff_L,Tydiff_R/Sydiff_R)
+        # Now find the min of time/strips on the left vs right hand side
+        ydiff = np.min( [Tydiff_L/Sydiff_L,Tydiff_R/Sydiff_R], axis = 0)
 
         # Use min time/strip to remove bad hits
         self.strips_x = self.strips_x[ (xdiff>T_L) & (xdiff<T_H)]
@@ -676,31 +685,26 @@ class TrackTools:
 
                 #set color map
                 cm = plt.get_cmap('jet')
-                cNorm = matplotlib.colors.Normalize(vmin=min(weights), vmax=max(weights))
+                cNorm = matplotlib.colors.Normalize(vmin=250000, vmax=650000)
                 scalarMap = cmx.ScalarMappable(norm=cNorm, cmap=cm)
                 
-                ax.scatter(x_vals, y_vals, z_vals, c=scalarMap.to_rgba(weights),s=300)
+                ax.scatter(x_vals*1e-4, y_vals*1e-4, z_vals*1e-4, c=scalarMap.to_rgba(weights),s=300)
                 scalarMap.set_array(weights)
                 fig.colorbar(scalarMap,label="No. electrons")
 
-                # Force all axis to have equal limits
-                extents = np.array([getattr(ax, 'get_{}lim'.format(dim))() for dim in 'xyz'])
-                sz = extents[:,1] - extents[:,0]
-                centers = np.mean(extents, axis=1)
-                maxsize = max(abs(sz))
-                r = maxsize/2
-                for ctr, dim in zip(centers, 'xyz'):
-                    getattr(ax, 'set_{}lim'.format(dim))(ctr - r, ctr + r)
+                set_axes_equal(ax)
 
                 # Set labels
-                ax.set_xlabel('x [um]')
-                ax.set_ylabel('y [um]')
-                ax.set_zlabel('z [um]')
+                ax.set_xlabel('x [cm]')
+                ax.set_ylabel('y [cm]')
+                ax.set_zlabel('z [cm]')
+                ax.set_box_aspect(None, zoom=0.85)
+
                 
                 if plot == True:
                     plt.show()
                 if save_name != None:
-                    fig.savefig("./figures/"+save_name+".pdf")
+                    fig.savefig("./figures/"+save_name+".pdf",bbox_inches='tight')
 
             return x_vals, y_vals, z_vals, weights
         
@@ -1029,7 +1033,10 @@ def fit_horizontal(x_vals, y_vals, y_errs):
 
 
 # A function to get the transverse mismeasurments of a 3D reconstrcuted alpha track
-def GetTransErrs(x_vals,y_vals,z_vals,charges):
+def GetTransErrs(x_vals,y_vals,z_vals,charges,charge_weighting = True):
+
+    if charge_weighting == False:
+        charges = np.ones(len(charges))
 
     X = np.array([x_vals,y_vals,z_vals]).T
 
@@ -1056,11 +1063,11 @@ def GetTransErrs(x_vals,y_vals,z_vals,charges):
     # The distribution of the x and y values gives us sigma x and sigma y
     err =X-proj
 
-    # Compute transverse mismeasurements using method 1
+    # Compute transverse mismeasurements using method 1 (see slides)
     delta_xs_1 = err[:,0]
     delta_ys_1 = err[:,1]
 
-    # Compute transverse mismeasurements using method 2
+    # Compute transverse mismeasurements using method 2 (see slides)
     delta_xs_2 = X[:,0] - ( ( v_PA[0] / v_PA[2] ) * X[:,2] ) 
     delta_ys_2 = X[:,1] - ( ( v_PA[1] / v_PA[2] ) * X[:,2] )
     
@@ -1095,13 +1102,13 @@ def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.1, stop = 1.0, step = 
             y_std += [np.std(y_mis[data_cut])]
 
 
-            xmin = -150
-            xmax = 150
-            ymin = -150
-            ymax = 150
+            xmin = -300
+            xmax = 300
+            ymin = -300
+            ymax = 300
 
 
-            nbins = 8
+            nbins = 16
 
             hist_x, bin_edges_x = np.histogram(x_mis[data_cut],nbins,(xmin,xmax))
             hist_y, bin_edges_y = np.histogram(y_mis[data_cut],nbins,(ymin,ymax))
@@ -1156,7 +1163,132 @@ def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.1, stop = 1.0, step = 
 
         except:
             print("fit failed for z = ", str(round( (z_low+z_high)/2.0 ,2)))
+
+    # Now fit mismeasurements over all z
+    
+    data_cut = (z_vals > 0.1) & (z_vals < 1.0)
+
+    hist_x, bin_edges_x = np.histogram(x_mis[data_cut],nbins,(xmin,xmax))
+    hist_y, bin_edges_y = np.histogram(y_mis[data_cut],nbins,(ymin,ymax))
+
+    bin_centers_x = (bin_edges_x[1:]+bin_edges_x[:-1])/2.
+    bin_centers_y = (bin_edges_y[1:]+bin_edges_y[:-1])/2.
+
+    # Find non-zero bins in Histogram
+    nz_x = hist_x>0
+    nz_y = hist_y>0
+
+    # Get posssion error bars for non-zero bins
+    n_err_x = np.sqrt(hist_x[nz_x])
+    n_err_y = np.sqrt(hist_y[nz_y])
+
+    # Fit Gaussian to binned data
+    coeff_x, covar_x = curve_fit(gaus2, bin_centers_x[nz_x], hist_x[nz_x], sigma=n_err_x, absolute_sigma=True, p0=(100,0,50))
+    coeff_y, covar_y = curve_fit(gaus2, bin_centers_y[nz_y], hist_y[nz_y], sigma=n_err_y, absolute_sigma=True, p0=(100,0,50))
+
+    # Compute fit (statistical) errors
+    perr_x = np.sqrt(np.diag(covar_x))
+    perr_y = np.sqrt(np.diag(covar_y))
+
+    print("sigma x: ", coeff_x[2], "+/-", perr_x[2])
+    print("sigma y: ", coeff_y[2], "+/-", perr_y[2])
+
+    if plot == True:
+        plt.figure()
+        hist, bin_edges,patches = plt.hist(x_mis[data_cut],nbins,(xmin,xmax),color = colors["blue"], histtype="step", label = "0.1 - 1 cm abs. z, x")
+        plt.errorbar(bin_centers_x[nz_x], hist_x[nz_x], n_err_x,color = colors["blue"])
+        hist, bin_edges,patches = plt.hist(y_mis[data_cut],nbins,(ymin,ymax),color = colors["red"],histtype="step", label = "0.1 - 1 cm abs. z, y")
+        plt.errorbar(bin_centers_y[nz_y], hist_y[nz_y], n_err_y,color = colors["red"])
+        plt.xlabel("Transverse Mismeasurment [um]")
+        plt.ylabel("Count")
+
+        IV = np.arange(xmin,xmax,1)
+
+        try:
+            f_opti_x = gaus2(IV,*coeff_x)
+            plt.plot(IV, f_opti_x,color = colors["blue"], linestyle='--', linewidth=2)
+        except:
+            pass
+
+        try:
+            f_opti_y = gaus2(IV,*coeff_y)
+            plt.plot(IV, f_opti_y,color = colors["red"], linestyle='--', linewidth=2)
+        except:
+            pass
+        
+        plt.legend()
+        plt.show()
+
+
             
 
 
     return abs_z, x_sigmas, x_sigmas_err, y_sigmas, y_sigmas_err, abs_z_std, x_std, y_std
+
+def set_axes_equal(ax):
+    """
+    Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc.
+
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    """
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+
+# Draw a 3-D vector isotropically from within specified angle to vertical 
+def random_three_vector(theta_min,theta_max):
+
+    theta_min = theta_min * 0.0174533 # convert to rad
+    theta_max = theta_max * 0.0174533 # convert to rad
+
+    phi = np.random.uniform()*2*np.pi
+
+    costheta = np.random.uniform(low = np.cos(theta_min), high= np.cos(theta_max) )
+    theta = np.arccos( costheta )
+
+    x = np.sin( theta) * np.cos( phi )
+    y = np.sin( theta) * np.sin( phi )
+    z = -1 * np.cos( theta ) # times -1 to flip it to the -z direction
+
+    return np.array([x,y,z])
+
+
+# Plot a point cloud of the track
+def plot_track(track):
+
+    track = track.T 
+
+    x_points, y_points, z_points = track[0],track[1], track[2]
+
+    # Plot the track
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+
+    ax.scatter3D(x_points, y_points, z_points, c='k', marker='o', alpha=0.1)
+
+    ax.set_xlabel('x [cm]',fontsize=15)
+    ax.set_ylabel('y [cm]',fontsize=15)
+    ax.set_zlabel('z [cm]',fontsize=15)
+    ax.tick_params(labelsize=12)
+    set_axes_equal(ax)
+    plt.tight_layout()
+    
