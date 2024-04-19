@@ -690,14 +690,17 @@ class TrackTools:
                 
                 ax.scatter(x_vals*1e-4, y_vals*1e-4, z_vals*1e-4, c=scalarMap.to_rgba(weights),s=300)
                 scalarMap.set_array(weights)
-                fig.colorbar(scalarMap,label="No. electrons")
+                cbar=fig.colorbar(scalarMap, fraction=0.025, pad=0.04)
+                cbar.ax.tick_params(labelsize=18)
+                cbar.set_label(label='No. electrons',size=18)
 
                 set_axes_equal(ax)
 
                 # Set labels
-                ax.set_xlabel('x [cm]')
-                ax.set_ylabel('y [cm]')
-                ax.set_zlabel('z [cm]')
+                ax.set_xlabel('x [cm]',labelpad = 20,fontsize=18)
+                ax.set_ylabel('y [cm]',labelpad = 20,fontsize=18)
+                ax.set_zlabel('z [cm]',labelpad = 7,fontsize=18)
+                ax.tick_params(labelsize=16)
                 ax.set_box_aspect(None, zoom=0.85)
 
                 
