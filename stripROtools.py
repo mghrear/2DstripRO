@@ -342,7 +342,7 @@ class TrackTools:
         # Drift speed as computed by Magboltz in um/ns
         self.v_drift = v_drift
 
-        # Stip pitch is always 200 um
+        # Stip pitch is always 200 um for UH detectors and 250 for UoS
         self.pitch_x = pitch_x
         self.pitch_y = pitch_y
         
