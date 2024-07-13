@@ -123,7 +123,7 @@ def gaus(x, y_off, const, mu, sigma):
 def gaus2(x, const, mu, sigma):
     return const* np.exp(-0.5*((x - mu)/sigma)**2)
 
-
+    
 # Horizontal fit Function
 def horizontal(x, H):
     return H
@@ -1039,7 +1039,7 @@ def fit_horizontal(x_vals, y_vals, y_errs):
 def GetTransErrs(x_vals,y_vals,z_vals,charges,charge_weighting = True):
 
     if charge_weighting == False:
-        charges = np.ones(len(charges))
+        charges = np.ones(len(x_vals))
 
     X = np.array([x_vals,y_vals,z_vals]).T
 
@@ -1081,7 +1081,7 @@ def GetTransErrs(x_vals,y_vals,z_vals,charges,charge_weighting = True):
 
 
 # A function which bins missmeasurments in z and fits them to Gaussians, outputting the results
-def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.1, stop = 1.0, step = 0.2, plot = True):
+def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.0, stop = 1.2, step = 0.2, plot = True):
 
     abs_z = []
     abs_z_std = []
@@ -1098,7 +1098,7 @@ def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.1, stop = 1.0, step = 
 
             #make data cut
             z_high = z_low + step
-            data_cut = (z_vals > z_low) & (z_vals < z_high)
+            data_cut = (z_vals >= z_low) & (z_vals < z_high)
 
             abs_z_std += [round( (z_low+z_high)/2.0 ,2)]
             x_std += [np.std(x_mis[data_cut])]
@@ -1227,6 +1227,100 @@ def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.1, stop = 1.0, step = 
 
 
     return abs_z, x_sigmas, x_sigmas_err, y_sigmas, y_sigmas_err, abs_z_std, x_std, y_std
+
+
+# A function which bins missmeasurments in z and fits them to Gaussians, outputting the results
+def Mismeasurment_vs_z_weighted( z_vals, x_mis , y_mis , charge, start = 0.0, stop = 10+0.2, step = 0.2, plot=True):
+    
+    abs_z = []
+    abs_z_std = []
+    x_sigmas = []
+    x_std = []
+    x_sigmas_err = []
+    y_sigmas = []
+    y_std = []
+    y_sigmas_err = []
+
+    for z_low in np.arange(start,stop,step):
+
+        try:
+
+            #make data cut
+            z_high = z_low + step
+            data_cut = (z_vals >= z_low) & (z_vals < z_high)
+
+            abs_z_std += [round( (z_low+z_high)/2.0 ,2)]
+            x_std += [np.std(x_mis[data_cut])]
+            y_std += [np.std(y_mis[data_cut])]
+
+
+            xmin = -300
+            xmax = 300
+            ymin = -300
+            ymax = 300
+
+
+            nbins = 16
+
+            hist_x, bin_edges_x = np.histogram(x_mis[data_cut],nbins,(xmin,xmax),weights=charge[data_cut])
+            hist_y, bin_edges_y = np.histogram(y_mis[data_cut],nbins,(ymin,ymax),weights=charge[data_cut])
+
+            bin_centers_x = (bin_edges_x[1:]+bin_edges_x[:-1])/2.
+            bin_centers_y = (bin_edges_y[1:]+bin_edges_y[:-1])/2.
+
+            # Find non-zero bins in Histogram
+            nz_x = hist_x>0
+            nz_y = hist_y>0
+
+            # Get posssion error bars for non-zero bins
+            n_err_x = np.sqrt(hist_x[nz_x])
+            n_err_y = np.sqrt(hist_y[nz_y])
+
+            # Fit Gaussian to binned data
+            coeff_x, covar_x = curve_fit(gaus2, bin_centers_x[nz_x], hist_x[nz_x], sigma=n_err_x, absolute_sigma=True, p0=(100,0,50))
+            coeff_y, covar_y = curve_fit(gaus2, bin_centers_y[nz_y], hist_y[nz_y], sigma=n_err_y, absolute_sigma=True, p0=(100,0,50))
+
+            # Compute fit (statistical) errors
+            perr_x = np.sqrt(np.diag(covar_x))
+            perr_y = np.sqrt(np.diag(covar_y))
+
+            print("sigma x: ", coeff_x[2], "+/-", perr_x[2])
+            print("sigma y: ", coeff_y[2], "+/-", perr_y[2])
+
+            if plot == True:
+                plt.figure()
+                hist, bin_edges,patches = plt.hist(x_mis[data_cut],nbins,(xmin,xmax),weights=charge[data_cut],color = colors["blue"], histtype="step", label = str( round( (z_low+z_high)/2.0 ,2) )+"abs. z, x")
+                plt.errorbar(bin_centers_x[nz_x], hist_x[nz_x], n_err_x,color = colors["blue"])
+                hist, bin_edges,patches = plt.hist(y_mis[data_cut],nbins,(ymin,ymax),weights=charge[data_cut],color = colors["red"],histtype="step", label = str( round( (z_low+z_high)/2.0 ,2) )+"abs. z, y")
+                plt.errorbar(bin_centers_y[nz_y], hist_y[nz_y], n_err_y,color = colors["red"])
+                plt.xlabel("Transverse Mismeasurment [um]")
+                plt.ylabel("Count")
+
+                IV = np.arange(xmin,xmax,1)
+
+                f_opti_x = gaus2(IV,*coeff_x)
+                f_opti_y = gaus2(IV,*coeff_y)
+
+
+                plt.plot(IV, f_opti_x,color = colors["blue"], linestyle='--', linewidth=2)
+                plt.plot(IV, f_opti_y,color = colors["red"], linestyle='--', linewidth=2)
+                plt.legend()
+                plt.show()
+
+            abs_z += [round( (z_low+z_high)/2.0 ,2)]
+            x_sigmas += [np.abs(coeff_x[2])]
+            x_sigmas_err += [perr_x[2]]
+            y_sigmas += [np.abs(coeff_y[2])]
+            y_sigmas_err += [perr_y[2]]
+
+        except:
+            print("fit failed for z = ", str(round( (z_low+z_high)/2.0 ,2)))            
+
+
+    return abs_z, x_sigmas, x_sigmas_err, y_sigmas, y_sigmas_err, abs_z_std, x_std, y_std
+
+
+
 
 def set_axes_equal(ax):
     """
