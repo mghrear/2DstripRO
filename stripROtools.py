@@ -1167,65 +1167,6 @@ def Mismeasurment_vs_z( z_vals, x_mis , y_mis , start = 0.0, stop = 1.2, step = 
         except:
             print("fit failed for z = ", str(round( (z_low+z_high)/2.0 ,2)))
 
-    # Now fit mismeasurements over all z
-    
-    data_cut = (z_vals > 0.1) & (z_vals < 1.0)
-
-    hist_x, bin_edges_x = np.histogram(x_mis[data_cut],nbins,(xmin,xmax))
-    hist_y, bin_edges_y = np.histogram(y_mis[data_cut],nbins,(ymin,ymax))
-
-    bin_centers_x = (bin_edges_x[1:]+bin_edges_x[:-1])/2.
-    bin_centers_y = (bin_edges_y[1:]+bin_edges_y[:-1])/2.
-
-    # Find non-zero bins in Histogram
-    nz_x = hist_x>0
-    nz_y = hist_y>0
-
-    # Get posssion error bars for non-zero bins
-    n_err_x = np.sqrt(hist_x[nz_x])
-    n_err_y = np.sqrt(hist_y[nz_y])
-
-    # Fit Gaussian to binned data
-    coeff_x, covar_x = curve_fit(gaus2, bin_centers_x[nz_x], hist_x[nz_x], sigma=n_err_x, absolute_sigma=True, p0=(100,0,50))
-    coeff_y, covar_y = curve_fit(gaus2, bin_centers_y[nz_y], hist_y[nz_y], sigma=n_err_y, absolute_sigma=True, p0=(100,0,50))
-
-    # Compute fit (statistical) errors
-    perr_x = np.sqrt(np.diag(covar_x))
-    perr_y = np.sqrt(np.diag(covar_y))
-
-    print("sigma x: ", coeff_x[2], "+/-", perr_x[2])
-    print("sigma y: ", coeff_y[2], "+/-", perr_y[2])
-
-    if plot == True:
-        plt.figure()
-        hist, bin_edges,patches = plt.hist(x_mis[data_cut],nbins,(xmin,xmax),color = colors["blue"], histtype="step", label = "0.1 - 1 cm abs. z, x")
-        plt.errorbar(bin_centers_x[nz_x], hist_x[nz_x], n_err_x,color = colors["blue"])
-        hist, bin_edges,patches = plt.hist(y_mis[data_cut],nbins,(ymin,ymax),color = colors["red"],histtype="step", label = "0.1 - 1 cm abs. z, y")
-        plt.errorbar(bin_centers_y[nz_y], hist_y[nz_y], n_err_y,color = colors["red"])
-        plt.xlabel("Transverse Mismeasurment [um]")
-        plt.ylabel("Count")
-
-        IV = np.arange(xmin,xmax,1)
-
-        try:
-            f_opti_x = gaus2(IV,*coeff_x)
-            plt.plot(IV, f_opti_x,color = colors["blue"], linestyle='--', linewidth=2)
-        except:
-            pass
-
-        try:
-            f_opti_y = gaus2(IV,*coeff_y)
-            plt.plot(IV, f_opti_y,color = colors["red"], linestyle='--', linewidth=2)
-        except:
-            pass
-        
-        plt.legend()
-        plt.show()
-
-
-            
-
-
     return abs_z, x_sigmas, x_sigmas_err, y_sigmas, y_sigmas_err, abs_z_std, x_std, y_std
 
 
@@ -1272,13 +1213,15 @@ def Mismeasurment_vs_z_weighted( z_vals, x_mis , y_mis , charge, start = 0.0, st
             nz_x = hist_x>0
             nz_y = hist_y>0
 
-            # Get posssion error bars for non-zero bins
-            n_err_x = np.sqrt(hist_x[nz_x])
-            n_err_y = np.sqrt(hist_y[nz_y])
+            # Get error bars from un-weighted histograms 
+            hist_x_err, bin_edges_x_err = np.histogram(x_mis[data_cut],nbins,(xmin,xmax))
+            hist_y_err, bin_edges_y_err = np.histogram(y_mis[data_cut],nbins,(ymin,ymax))
+            frac_err_x = np.sqrt(hist_x_err[nz_x])/hist_x_err[nz_x]
+            frac_err_y = np.sqrt(hist_y_err[nz_y])/hist_y_err[nz_y]
 
             # Fit Gaussian to binned data
-            coeff_x, covar_x = curve_fit(gaus2, bin_centers_x[nz_x], hist_x[nz_x], sigma=n_err_x, absolute_sigma=True, p0=(100,0,50))
-            coeff_y, covar_y = curve_fit(gaus2, bin_centers_y[nz_y], hist_y[nz_y], sigma=n_err_y, absolute_sigma=True, p0=(100,0,50))
+            coeff_x, covar_x = curve_fit(gaus2, bin_centers_x[nz_x], hist_x[nz_x], sigma= (hist_x[nz_x]*frac_err_x), absolute_sigma=True, p0=(100,0,50))
+            coeff_y, covar_y = curve_fit(gaus2, bin_centers_y[nz_y], hist_y[nz_y], sigma=(hist_y[nz_y]*frac_err_y), absolute_sigma=True, p0=(100,0,50))
 
             # Compute fit (statistical) errors
             perr_x = np.sqrt(np.diag(covar_x))
