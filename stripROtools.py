@@ -143,35 +143,6 @@ def linear(x, a, b):
 	return (a * x) + b
 
 
-# townsend gain eqn fit function
-def townsend(X, A, B, m):
-
-    V,t = X # V is the mesh voltage [V] and t is the amplifcation gap [m]
-
-    p = 101325 # p is pressure in Pa
-    
-    return A * ( ( (V/t) / p )**m ) * np.exp( -B * ( ( p / (V/t) )**(1-m) ) ) * p * t
-
-
-# townsend gain eqn fit function
-def townsend_MG(X, A, B, C, m):
-
-    V,t = X # V is the mesh voltage [V] and t is the amplifcation gap [m]
-
-    p = 101325 # p is pressure in Pa
-    
-    return A * ( ( (V/t - C) / p )**m ) * np.exp( -B * ( ( p / (V/t - C) )**(1-m) ) ) * p * t
-
-# townsend gain eqn fit function
-def townsend_MG2(X, A, B, C, D, m):
-
-    V,t = X # V is the mesh voltage [V] and t is the amplifcation gap [m]
-
-    p = 101325 # p is pressure in Pa
-    
-    return A * ( ( (V/t - C) / p )**m ) * np.exp( -B * ( ( p / (V/t - C) )**(1-m) ) ) * p * t + D
-
-
     
 # Creates an object which manages all config and calib informatuion
 class VMMconfig:
@@ -345,7 +316,36 @@ class TrackTools:
         # Stip pitch is always 200 um for UH detectors and 250 for UoS
         self.pitch_x = pitch_x
         self.pitch_y = pitch_y
+
+    def mask_channels (self, masked_x_channels,masked_y_channels):
+
+        if masked_x_channels != None:
         
+            mask = np.zeros( len(self.strips_x) )
+
+            for ch in masked_x_channels:
+                mask += (self.strips_x == ch )
+            
+            mask = (mask == 0)
+
+            self.strips_x = self.strips_x[mask]
+            self.ADC_x = self.ADC_x[mask]
+            self.times_x = self.times_x[mask]
+
+        if masked_y_channels != None:
+        
+            mask = np.zeros( len(self.strips_y) )
+
+            for ch in masked_y_channels:
+                mask += (self.strips_y == ch )
+            
+            mask = (mask == 0)
+            
+            self.strips_y = self.strips_y[mask]
+            self.ADC_y = self.ADC_y[mask]
+            self.times_y = self.times_y[mask]
+
+
     def TimeHistView(self, t_bin = 10):
 
         t_max = int(max(np.max(self.times_x),np.max(self.times_y)))
@@ -1233,9 +1233,7 @@ def Mismeasurment_vs_z_weighted( z_vals, x_mis , y_mis , charge, start = 0.0, st
             if plot == True:
                 plt.figure()
                 hist, bin_edges,patches = plt.hist(x_mis[data_cut],nbins,(xmin,xmax),weights=charge[data_cut],color = colors["blue"], histtype="step", label = str( round( (z_low+z_high)/2.0 ,2) )+"abs. z, x")
-                plt.errorbar(bin_centers_x[nz_x], hist_x[nz_x], n_err_x,color = colors["blue"])
                 hist, bin_edges,patches = plt.hist(y_mis[data_cut],nbins,(ymin,ymax),weights=charge[data_cut],color = colors["red"],histtype="step", label = str( round( (z_low+z_high)/2.0 ,2) )+"abs. z, y")
-                plt.errorbar(bin_centers_y[nz_y], hist_y[nz_y], n_err_y,color = colors["red"])
                 plt.xlabel("Transverse Mismeasurment [um]")
                 plt.ylabel("Count")
 
